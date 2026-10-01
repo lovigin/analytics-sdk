@@ -1,5 +1,7 @@
 import { isIP } from 'node:net';
 
+let lookupWarningShown = false;
+
 function publicIp(value: string | null): string | undefined {
   if (!value) return;
   const ip = value.trim();
@@ -41,6 +43,10 @@ export async function requestCountry(request: Request): Promise<string> {
     const geoip = await import('geoip-country');
     return countryCode(geoip.lookup(ip)?.country) ?? 'ZZ';
   } catch {
+    if (!lookupWarningShown) {
+      lookupWarningShown = true;
+      console.warn('[Lovigin Analytics] Country lookup unavailable. In next.config, add geoip-country to serverExternalPackages, install dependencies, and rebuild the site. Page views are still counted with country ZZ.');
+    }
     return 'ZZ';
   }
 }

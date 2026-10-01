@@ -7,7 +7,7 @@ If upgrading from 0.1, remove the old Lovigin import, `createLoviginAnalytics` s
 ## Install
 
 ```sh
-npm install @lovigin/next@^0.4.0
+npm install @lovigin/next@^0.4.1
 ```
 
 Put the complete one-time token from your Lovigin dashboard in your site's **server** environment (not `NEXT_PUBLIC_`):
@@ -45,7 +45,19 @@ Version 0.3 removes the required `routes` list from 0.2. Replace it with site-sp
 
 ## Country totals
 
-No additional configuration is needed. The server-side SDK reads Vercel's country header on Vercel, or performs an offline country-only GeoIP lookup using the rightmost IP appended by a reverse proxy such as Nginx. It never calls an external IP lookup API. If the host provides no usable visitor IP, the result is `ZZ` (unknown), not the server's country. Only the two-letter country code reaches Lovigin; the visitor IP is neither sent nor stored by Lovigin. The dashboard displays a country only once it has at least five views in the selected period; smaller groups are folded into unknown.
+In your existing `next.config.ts`, add `geoip-country` to `serverExternalPackages`, preserving any existing entries:
+
+```ts
+const nextConfig = {
+  // Keep your other Next.js settings here.
+  serverExternalPackages: ['geoip-country'],
+};
+export default nextConfig;
+```
+
+Rebuild and restart the site after changing this setting. Without it, Next.js bundling can break the database file paths and all views are recorded with country `ZZ`. This setting also lets Next.js include the GeoIP database in standalone deployment output. It works with SDK 0.4.0 too; upgrading to 0.4.1 adds an explicit warning for failed database loading.
+
+The server-side SDK reads Vercel's country header on Vercel, or performs an offline country-only GeoIP lookup using the rightmost IP appended by a reverse proxy such as Nginx. It never calls an external IP lookup API. If the host provides no usable visitor IP, the result is `ZZ` (unknown), not the server's country. Only the two-letter country code reaches Lovigin; the visitor IP is neither sent nor stored by Lovigin. The dashboard displays a country only once it has at least five views in the selected period; smaller groups are folded into unknown. Earlier `ZZ` records cannot be reconstructed as countries because no IPs were retained.
 
 The SDK cannot authenticate arbitrary forwarding headers on every possible host. Keep the Next.js server behind a trusted reverse proxy that appends the connecting IP to `X-Forwarded-For` and do not expose its application port publicly. If a hosting platform does not provide a trustworthy client address, country detection remains unavailable rather than guessing. The offline lookup uses GeoLite2 data distributed by `geoip-country`; keep dependencies current. This product includes GeoLite2 data created by MaxMind, available from [maxmind.com](https://www.maxmind.com).
 
