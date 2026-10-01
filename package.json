@@ -1,0 +1,29 @@
+{
+  "name": "@lovigin/next",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "Privacy-minimising first-party analytics SDK for Next.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./client": { "types": "./dist/client.d.ts", "default": "./dist/client.js" }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test test/*.test.ts",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": { "next": ">=16 <17", "react": ">=19 <20" },
+  "dependencies": { "geoip-country": "^5.0.202609300220" },
+  "overrides": { "geoip-country": { "ip-address": "10.7.2" } },
+  "devDependencies": {
+    "@types/geoip-country": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "next": "16.3.6",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}
