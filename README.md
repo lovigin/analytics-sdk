@@ -4,10 +4,20 @@ First-party, privacy-minimising page analytics for server-capable Next.js 16 sit
 
 If upgrading from 0.1, remove the old Lovigin import, `createLoviginAnalytics` setup, and `analytics.proxy(request, event)` call from your existing proxy. Keep your original proxy logic and matcher; the old proxy API is no longer exported.
 
-## Install
+## Optional UTM aggregation
+
+SDK 0.5.0 supports `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, and `utm_term`. Each field is disabled by default; enable only the required switches in the project's dashboard settings. No route-handler or layout changes are needed when upgrading from 0.4.x.
+
+The browser first asks your existing same-origin handler for the enabled field names, without sending UTM values. Only enabled, validated values are then submitted with one page view. Your server and the Lovigin API both filter them again. Configuration is cached on your server for up to one minute; the API's current selection remains authoritative. Configuration failures omit UTM but still count the page view. No token is sent to the browser.
+
+UTM is counted separately per UTC day, parameter, and normalized value, not as a visitor profile or multi-touch attribution. Campaign values are not saved in cookies, local storage, or linked to later navigations. Reports show groups after at least five tagged page views. Disabling a field stops new aggregation but does not erase existing data; retention and Delete all data also apply to UTM.
+
+Values are lowercased, limited to 96 characters, and restricted to letters, numbers, spaces, dots, hyphens and underscores. Obvious email/URL/numeric-identifier formats and duplicate parameters are discarded. This filtering cannot detect every personal identifier: **never place personal or sensitive data in UTM values**. Click IDs, arbitrary URL parameters, and complete URLs are not collected. Optional campaign measurement is not a blanket guarantee of exemption from consent requirements.
+
+## Installation
 
 ```sh
-npm install @lovigin/next@^0.4.1
+npm install @lovigin/next@^0.5.0
 ```
 
 Put the complete one-time token from your Lovigin dashboard in your site's **server** environment (not `NEXT_PUBLIC_`):
@@ -39,7 +49,7 @@ import { LoviginAnalytics } from '@lovigin/next/client';
 
 All rendered pages are counted by default. `exclude` can contain exact pages or whole sections ending in `/**`; the example excludes `/account` and every page below it. Always exclude sections with financial, account, recovery, or other sensitive content. The SDK never needs a list of included pages.
 
-The browser converts the pathname to a route template using Next.js dynamic route parameters, then sends only that template to `/api/lovigin` on **your own domain**, without credentials or referrer. `/contacts` remains `/contacts`; `/blog/worthy` becomes `/blog/:slug`. If the SDK cannot safely determine a template, it sends `/other` instead of the raw address. Query strings, dynamic values, IP addresses, cookies, and referrers do not reach Lovigin. An initial rendered page and subsequent client-side navigations are counted; prefetches are not. The client does not set tracking identifiers or analytics storage.
+The browser converts the pathname to a route template using Next.js dynamic route parameters, then sends that template and any explicitly enabled, validated UTM categories to `/api/lovigin` on **your own domain**, without credentials or referrer. `/contacts` remains `/contacts`; `/blog/worthy` becomes `/blog/:slug`. If the SDK cannot safely determine a template, it sends `/other` instead of the raw address. Complete query strings, dynamic path values, IP addresses, cookies, and referrers do not reach Lovigin. An initial rendered page and subsequent client-side navigations are counted; prefetches are not. The client does not set tracking identifiers or analytics storage.
 
 Version 0.3 removes the required `routes` list from 0.2. Replace it with site-specific `exclude` entries when upgrading. `exclude` matches the route template, so exclude whole sensitive sections (for example `/account/**`) rather than one dynamic URL.
 
@@ -69,7 +79,7 @@ import { LoviginOptOut } from '@lovigin/next/client';
 <LoviginOptOut />
 ```
 
-The control stores only a first-party opt-out preference cookie after a visitor clicks it. The client also honors Global Privacy Control when available. This preference is not used to identify visitors. No visitor IP address, user agent, cookies, full URL, or referrer is forwarded to Lovigin. The API receives only a day, safe route template, count, and optional country code; source and device remain unspecified defaults. The server logs failed delivery, but a failed or invalid analytics configuration does not break website pages. Counts can be lost when delivery fails.
+The control stores only a first-party opt-out preference cookie after a visitor clicks it. The client also honors Global Privacy Control when available. This preference is not used to identify visitors. No visitor IP address, user agent, cookies, full URL, or referrer is forwarded to Lovigin. The API receives a day, safe route template, count, optional country code, and optional enabled UTM categories; source and device remain unspecified defaults. The server logs failed delivery, but a failed or invalid analytics configuration does not break website pages. Counts can be lost when delivery fails.
 
 No automatic scrubber can recognize every possible sensitive static path, rewrite, or custom URL scheme. Review your routes and use `exclude` for those sections. The safe `/other` fallback limits exposure but also combines those page counts in the dashboard.
 

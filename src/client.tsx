@@ -3,6 +3,7 @@
 import { useParams, usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { safeRouteTemplate } from './route.js';
+import { UTM_KEYS, utmFromSearch } from './utm.js';
 
 const OPT_OUT_COOKIE = 'lovigin_analytics_opt_out';
 
@@ -21,14 +22,30 @@ export function LoviginAnalytics({ endpoint = '/api/lovigin' }: { endpoint?: str
     if (!pathname || !route || pathname === lastPath.current) return;
     lastPath.current = pathname;
     if (optedOut()) return;
-    void fetch(endpoint, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ path: route }),
-      credentials: 'omit',
-      referrerPolicy: 'no-referrer',
-      keepalive: true
-    }).catch(() => { /* Analytics never affects the page. */ });
+    const search = location.pathname === pathname ? location.search : '';
+    void (async () => {
+      let utm = {};
+      if (UTM_KEYS.some(key => new URLSearchParams(search).has(key))) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: route, config: true }),
+            credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(1500)
+          });
+          const config = await response.json() as { utmKeys?: unknown };
+          if (Array.isArray(config.utmKeys)) utm = utmFromSearch(search, config.utmKeys);
+        } catch { /* Configuration failure drops UTM, not the page view. */ }
+      }
+      if (optedOut()) return;
+      await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: route, ...(Object.keys(utm).length ? { utm } : {}) }),
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        keepalive: true
+      });
+    })().catch(() => { /* Analytics never affects the page. */ });
   }, [endpoint, pathname, route]);
   return null;
 }

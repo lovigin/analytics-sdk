@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ROUTE_PATTERN } from './route.js';
 import { requestCountry } from './country.js';
+import { sanitizeUtm, UTM_KEYS } from './utm.js';
 
 const DEFAULT_API_URL = 'https://api.analytics.lovigin.com';
 
@@ -30,6 +31,23 @@ function isExcluded(path: string, exclusions: { path: string; prefix: boolean }[
 
 /** A standalone Next.js route handler. It never participates in proxy.ts. */
 export function createLoviginHandler(config: LoviginHandlerConfig, fetchImpl: typeof fetch = fetch) {
+  let cachedKeys: string[] = [];
+  let cacheUntil = 0;
+  async function enabledKeys(): Promise<string[]> {
+    if (!connection) return [];
+    if (Date.now() < cacheUntil) return cachedKeys;
+    try {
+      const url = new URL('/v1/config', connection.endpoint);
+      url.searchParams.set('siteId', connection.siteId);
+      const response = await fetchImpl(url.toString(), { headers: { 'x-lovigin-key': connection.ingestKey }, cache: 'no-store', signal: AbortSignal.timeout(1000) });
+      if (!response.ok) throw new Error('Configuration unavailable');
+      const data = await response.json() as { utmKeys?: unknown };
+      const keys = data.utmKeys;
+      cachedKeys = Array.isArray(keys) ? UTM_KEYS.filter(key => keys.includes(key)) : [];
+      cacheUntil = Date.now() + 60000;
+    } catch { cachedKeys = []; cacheUntil = Date.now() + 2000; }
+    return cachedKeys;
+  }
   let connection: { siteId: string; ingestKey: string; endpoint: string; exclusions: { path: string; prefix: boolean }[] } | undefined;
   try {
     if (config.exclude !== undefined && (!Array.isArray(config.exclude) || config.exclude.length > 200)) throw new Error('Provide at most 200 exclusions');
@@ -61,7 +79,7 @@ export function createLoviginHandler(config: LoviginHandlerConfig, fetchImpl: ty
     let input: unknown;
     try {
       const body = await request.text();
-      if (body.length > 512) return new Response(null, { status: 413 });
+      if (body.length > 4096) return new Response(null, { status: 413 });
       input = JSON.parse(body);
     } catch {
       return new Response(null, { status: 400 });
@@ -70,6 +88,12 @@ export function createLoviginHandler(config: LoviginHandlerConfig, fetchImpl: ty
     const path = (input as { path?: unknown }).path;
     if (typeof path !== 'string' || !validTemplate(path)) return new Response(null, { status: 400 });
     if (isExcluded(path, connection.exclusions)) return new Response(null, { status: 204 });
+
+    if ((input as { config?: unknown }).config === true) {
+      return Response.json({ utmKeys: await enabledKeys() }, { headers: { 'cache-control': 'no-store' } });
+    }
+    const rawUtm = (input as { utm?: unknown }).utm;
+    const utm = rawUtm ? sanitizeUtm(rawUtm, await enabledKeys()) : {};
 
     const country = await requestCountry(request);
 
@@ -80,7 +104,7 @@ export function createLoviginHandler(config: LoviginHandlerConfig, fetchImpl: ty
         body: JSON.stringify({
           siteId: connection.siteId,
           batchId: randomUUID(),
-          rows: [{ day: new Date().toISOString().slice(0, 10), event: 'page_view', label: '', path, source: 'direct', country, device: 'unknown', count: 1 }]
+          rows: [{ day: new Date().toISOString().slice(0, 10), event: 'page_view', label: '', path, source: 'direct', country, device: 'unknown', count: 1, ...(Object.keys(utm).length ? { utm } : {}) }]
         }),
         cache: 'no-store',
         signal: AbortSignal.timeout(3000)

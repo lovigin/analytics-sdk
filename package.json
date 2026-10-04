@@ -1,6 +1,6 @@
 {
   "name": "@lovigin/next",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "type": "module",
   "description": "Privacy-minimising first-party analytics SDK for Next.js",
   "main": "./dist/index.js",
